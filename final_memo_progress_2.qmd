@@ -1,0 +1,52 @@
+---
+title: "Final Project Progress Memo 2"
+subtitle: "Data Science 2 with R (STAT 301-2)"
+author: "Zosia Alarr, Chelsea Lu, Ryan Nguyen"
+
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: show
+    link-external-newwindow: true
+
+    
+execute:
+  warning: false
+  
+from: markdown+emoji  
+---
+
+## GitHub Repo Link
+
+<https://github.com/STAT301-3-2023SP/final-project-weheartr>
+
+## Feature Engineering
+
+We are currently looking at 4 different recipes: a kitchen sink recipe, one recipe using just the variables we received with lasso variable selection, one recipe using just the variables we received with random forest variable selection, and a final recipe with varying steps, using the best variable selection method we received. The first three recipes would remove likes since it'd be directly connected to our outcome variable `popularity` using `step_rm()`, encode all nominal variables using `step_dummy()`, remove all zero-variance variables with `step_nzv()`, normalize all variables using `step_normalize()`, tokenize the artist variable using `step_tokenize()`, convert this variable into multiple variables containing term frequency-inverse document frequency of tokens using `step_tfidf()`, and impute missing observations with `step_impute_mean()`. Our final recipe would play with imputation methods, perhaps with `step_impute_knn()` or `step_impute_bag()`, and adding interaction steps.
+
+Additionally, after running all of our models, we are planning on taking the best 3 with the best recipe and stacking them, to optimize our model.
+
+## Assessment
+
+Because our problem is a classification problem that predicts the level of popularity for a song, we will be using `roc_auc`, or the Area Under the Receiver Operating Characteristic Curve. Thus, the model with the greatest value of `roc_auc` will be our best model.
+
+## Current Models
+
+So far, we have run our null/baseline model as well as our elastic net model, with the results shown below. Our null model resulted in an `roc_auc` of 0.5 and a run time of 9.95 minutes. Meanwhile, our elastic net model resulted in an `roc_auc` of 0.939 and a run time of 43.45 minutes, meaning our elastic net is the best thus far. From here, we hope to run the rest of our models in the next week, and find the best models and recipes.
+
+### Null Model
+
+![](null_fit.png)
+
+![](null_time.png)
+
+### Elastic Net Model
+
+![](en_table.png)
+
+![](en_time.png)
+
+## Issues
+
+Initially, our models were not running and consistently failed. After problem solving, we discovered it was because we had missing values in our outcome variable and logic variables, which we ended up removing altogether, allowing the model to run. Additionally, because we are tokenizing a variable, we have to ensure that we do not utilize parallel processing.

@@ -1,0 +1,146 @@
+---
+title: "Predicting Popularity Of Songs"
+subtitle: "Data Science 3 with R (STAT 301-3) Final Project"
+author: "Zosia Alarr, Chelsea Lu, Ryan Nguyen"
+
+format:
+  html:
+    toc: true
+    embed-resources: true
+    echo: false
+    link-external-newwindow: true
+    
+execute:
+  warning: false
+  
+from: markdown+emoji  
+---
+
+**GitHub Repo:** <https://github.com/STAT301-3-2023SP/final-project-weheartr>
+
+## Introduction
+
+In 2022, the U.S. music industry reached an all-time high of \$15.9 billion - the industry's seventh year of consecutive growth (Aswad). To capitalize off of this expanding industry, our objective is to help producers, songwriters and music artists determine what songs will be the most popular. This will also help them to have a better idea of what song qualities attribute most to popularity, and how to write and produce music that best fits those qualities. This will allow those in the music industry to create popular songs and make them more desirable to a larger audience.
+
+In order to complete our objective, we used a dataset found on the Kaggle website to build our predictive models. The link to our data can be found [here](https://www.kaggle.com/datasets/salvatorerastelli/spotify-and-youtube). This dataset's information was pulled from Spotify and YouTube. There are 20,718 observations, each representing a different song. The dataset includes songs from all kinds of genres to ensure our analysis encompasses all types of music - including rap, pop, EDM, country, folk. It also consists of 26 variables, which measure different characteristics and statistics of the song. This includes a variety of descriptor variables such as artist, track, album, and description. Additionally, it includes various numeric variables like number of views, comments, tempo, danceability, and loudness, among others.
+
+Therefore, the target variable we will be trying to predict is the number of likes, which will in turn predict the popularity of a song. In order to determine a song's popularity, we split up songs with into categories. We determined these thresholds by dividing the total number of observations by 4, thereby designating each song to a category. Thus, this is a multi-class classification problem.
+
+## Data Overview
+
+None of the variables had more than 20% of their observations missing. However, it was decided to filter out the missing values for the response variable `likes` because it was causing computational errors in the recipe, this got rid of only 541 observations. The initial response variable `likes` was extremely right-skewed. The majority of songs had low-mid numbers of likes while a few were extreme outliers having more than 10 million likes.
+
+![](dis_likes.png)
+
+Instead of using a log transformation or filtering out outliers, we decided to mutate `likes` into a new categorical response variable, `popularity`. The new response variable had four levels. If the number of likes on a song was less than 23,160, the observation was assigned to the level `least popular`. If the number of likes was between 23,160 and 129,251.5 it was assigned to `less popular`, if it was between 129.251.5 and 520,054.2 it was assigned to `more popular` and if the number of likes was greater than 520,054.2 it was assigned to `most popular`. The new factor levels in `popularity` were relatively balanced.
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(kableExtra)
+load("data/processed/dist_popularity.rda")
+dist_popularity
+```
+
+We decided to exclude 6 variables that we identified as ID variables, this included things like `track`, `uri`, `description`, etc.
+
+## Methods
+
+After performing our EDA, we were able to begin our machine learning.
+
+### Recipes
+
+We used 3 different recipes, with the main variation in our variable selection. Our data had 20 variables, and we utilized random forest and lasso to find important variables. The first recipe was a kitchen sink recipe, where all the predictor variables in the entire dataset were used. This recipe consisted of `step_rm()` to remove likes since this would be directly correlated to our outcome variable (popularity), `step_tokenize()` to treat the artist names as tokens, `step_tokenfilter()` to select the top artist tokens, `step_tfidf()` to convert the token variables into multiple variables containing the term frequency-inverse document frequency, `step_impute_mean()` to impute missing numeric values, `step_impute_knn()` to impute missing factor values, `step_dummy()` to handle the nominal data, `step_zv()` to remove variables with no variance, `step_normalize()` to center and normalize all predictors, and `step_pca()` to convert numeric data into principal components.
+
+For variable selection, we used a lasso workflow to find which variables were significant in predicting, filtering out any variables that go to a coefficient of 0. We used these variables in our second recipe, as well as `step_dummy()`, `step_zv()`, `step_normalize()`, `step_impute_mean()`, and `step_impute_knn()`. Furthermore, we also used a random forest workflow to create a variable importance plot, and used these variables in our third recipe, with the same steps as the second recipe.
+
+The resampling technique we used was repeated v-fold cross-validation, where the training dataset is randomly partitioned into sets of roughly equal size. Then, the final performance measure is the average of each of the replicates. Because of the large size of the training data, it was split into 5 sets, repeated 3 times. The folds are also stratified by the outcome variable, `popularity`. The final performance measure is roc_auc, or the area under the receiver operator curve. The greater the roc_auc, the better the model predicted; therefore, we want to maximize the roc_auc.
+
+### Models
+
+The first model was the null model, which is simple and uninformative. It does not have any main arguments, and creates a baseline for modeling to compare all other models.
+
+The second model was an elastic net model, or logistic regression. Here, `penalty()`, which is the amount of regularization, and `mixture()`, which is the proportion of lasso penalty, were tuned. A grid of the tuning parameters was created with 5 levels.
+
+The third model was the random forest model. Here, multiple decision trees were made and stratified into regions. Predictions use the mean response value in the region it belongs. `min_n`, the minimal node size of data points to split, and `mtry`, the sample predictors, were tuned. `mtry` was updated to (1, 25) to decrease computation time, while still providing a large range to tune. A grid was created with 5 levels.
+
+The fourth model is the boosted tree model. Multiple sequential simple regression trees are combined into a better model, each one training on the residuals from previous trees to improve prediction. All of the trees are combined using an additive model, with their weights being estimated with gradient descent. In boosted trees, `min_n`, `mtry`, and `learn_rate`, or how much each tree should impact the next/learning rate, are all tuned. Again, `mtry` was updated to (1,17) to decrease computation time and a grid was created with 5 levels.
+
+The next model was the k-nearest neighbors model. This algorithm is dependent on the distance of a point from other data points, where the distance is calculated with every training data point and the K that is smallest is chosen. A grid was created with 5 levels for tuning.
+
+The fifth model was a support vector machine polynomial model. Here, the model finds a hyperplane in an N-dimensional space (N number of features) that distinctly classifies data points, maximizing the distance between hyperplanes and the closest data points from each. The support vectors or observations exist in a polynomial shape. With this model, `cost()`, or the penalty for misclassification; degree, or the degree of the polynomial function; and scale factor, or the scaling factor of the polynomial function used in kernel, were all tuned. A grid was created with 5 levels.
+
+The sixth model was a support vector radial model, which works very similar to the support vector polynomial model; however, the support vectors are in a circular shape. With this model, `cost()` was also tuned, as well as `rbf_sigma()`, or the width parameter, which determines the radius of influence of the support vectors. A grid was also created with 5 levels.
+
+The seventh model we tuned was a neural network model. Here, machine learning teaches the computers to do what naturally comes to humans, hence the name. We tuned `hidden_units()`, or the number of hidden units in each layer, and `penalty()`, or the amount of regularization.
+
+The eighth model we attempted to tune was a multivariate adaptive regression splines (MARS), The model partitions predictor space into a set of non-overlapping regions space partitioned using basis function. After numerous failed attempts and consultation with the instructor, we decided to omit the MARS model from our final tuning and machine learning due to computational complexity of utilizing this model to predict a multi-level classification problem such as ours.
+
+Lastly, we used a stack ensemble model of our best performance model, where the model tunes objects, or fits resamples of objects and picks best candidate models and puts them together, blending results from models into one output. Since our best models on our initial recipes were random forest, SVM poly, and boosted tree, we stacked these three models together, and used `blend_predictions()` to evaluate how to combine the predictions.
+
+## Model Building & Selection
+
+Again, the metric we will be using to evaluate our models is `roc_auc`, a measure that indicates the accuracy of our models ability to discriminate between classes. A greater value indicates that the model is better able to accurately predict which popularity class a song will fall into. Below includes our best performing models with our first kitchen sink recipe. As we can see, random forest, boosted tree, and SVM poly performed the best, with an `roc_auc` of 0.9811396, 0.9763131, and 0.9645296 respectively.
+
+Furthermore, we can look at the various run times of the models, in the table below. As we can see, the neural network and boosted tree models were the fastest, at around 10 minutes, next the random forest at around 18 minutes, then the elastic net at around 43 minutes, followed by k-nearest neighbor with 188 minutes or 3 hours, then SVM poly at 496 minutes or 8 hours, and lastly, SVM radial at 3928 minutes, or 65 hours. It appears the SVM radial model was computationally expensive, so it may be good to avoid rerunning.
+
+```{r}
+load("recipe_1/results/recipe_1_results.rda")
+best_graph_1
+best_results %>% 
+  rename("runtime (minutes)" = runtime) %>% 
+  kbl() %>% 
+  kable_styling()
+```
+
+Therefore, we decided to pursue tuning and updating our top three models with our other recipes. Below includes a table and graph with the results from the recipes with the top three models. Evidently, the random forest model performed better than the two others on all recipes, with the best having an `roc_auc` of 0.9811396.The boosted tree was the next best model, with an `roc_auc` of 0.9788355, which is lower than the `roc_auc` of all of the recipes with random forest. SVM Poly performed the worst of the three, with its best having an `roc_auc` of 0.9667758, which is lower than all of the recipes with the two other models.
+
+```{r}
+load("results/recipe_comp.rda")
+model_comp
+recipe_comp %>% 
+  kbl() %>% 
+  kable_styling()
+```
+
+In terms of tuning, the random forest model's mtrys were updated from (1,25) and the best models had an `mtry` of 19 or 25; therefore, we updated the range to (15, 30) for future models. For SVM poly, the best models had a cost of 32, then 2.378414, and degrees of 1, then 2, then 3. The n tuning parameter seemed to range from 10 to 15, and could be further tuned to find the optimal. For the boosted tree model, the mtrys were updated from 1 to 17, and the best models had an mtry of 17. Thus, we updated the range to (15, 30) for future models and recipes.
+
+Additionally, it appears recipe 2 using the variables with lasso variable selection performed best for both boosted tree and SVM poly, followed by recipe 3 using variables with random forest variable selection, with recipe 1 (kitchen sink) as the lowest. However, for our best model, random forest, recipe 1 and recipe 2 are extremely close, with a 1.7e-3 difference, as their standard deviations directly overlap. Finally, our random forest model with our kitchen sink was the best model, since it had the highest `roc_auc`. This was shocking since for other models, recipe 2 performed the best using variable selection. We then stacked the 3 models with recipe 2, since this performed typically the best, and predicted this on the training set, comparing this result with our random forest model to find the best one. As we can see in the model below, the stacked ensemble kept 10 models of the random forest, boosted tree, and SVM poly, with the coefficients seen below. The `roc_auc` was a 0.979, which is lower than the random forest model with recipe 1. Therefore, the random forest model with recipe 1 was our final model.
+
+```{r}
+load("stacked_model/results/stacked_results.rda")
+coefs %>% 
+  rename(coefficient = coef) %>% 
+  kbl() %>% 
+  kable_styling()
+stacked_plot +
+  labs(title = "Stacked Model Coefficients", y = "Stacking Coefficient")
+stacked_roc %>% 
+  kbl() %>% 
+  kable_styling()
+```
+
+## Final Model Analysis
+
+The recipe 1 random forest model was fit to the entire training set. Predictions were then made on the testing set. The tuning parameters for this winning model can be observed in the table below. ![](rf_params.png)
+
+The ROC AUC value was then calculated and found to be 0.98. This indicates that the model was able to accurately predict what popularity class a song belonged to for nearly every observation.\
+![](rf_roc_auc.png)
+
+The model also had an accuracy value of 0.887, indicating that the model predicts what popularity level a song will fall under 88% of the time. A confusion matrix that shows the true vs the predicted classes can be observed below. ![](rf_conf_matrix.png)
+
+The matrix displays that for the majority of the time, the model accurately predicted what class an observation belonged to, but it failed to do so on occasion. Furthermore, when fit to the testing data, our model performed better than the null model, which had an ROC AUC value of 0.5, and an accuracy of 0.257. Overall, the model performed extremely well and was able to predict song popularity with great precision.
+
+## Conclusion
+
+In conclusion, we conducted a multiclass prediction problem that sought to predict the popularity of a song. After evaluating many models and 3 different recipes, the random forest model with our initial kitchen sink recipe was the most successful in predicting popularity. Including all of the predictor variables and artist names as tokens seemed to lead to the most salient results.
+
+For future analysis and next steps, we recommend a number of things. Because of computational errors, we were unable to run the MARS model successfully and also couldn't impute the `likes` missing observations. Our next attempt would involve figuring out those issues. Furthermore, more work could be done on extremely viral songs that have millions of likes. This is especially prevalent in the time of Tik Tok, where snippets of songs get popular, leading the entire song to viralness on music streaming platforms. Next time, we could perhaps create a new category to deal with those extreme outliers, and find a dataset that has more observations to include them.
+
+It would also be interesting to explore a larger dataset with more observations pulled from other music streaming platforms to get a more comprehensive prediction of the music streaming industry. This might include Apple Music, Pandora, or TIDAL. Future analysis might also involve predicting song popularity within genres, like pop/hip-hop/folk. This is because variables like "danceability" or "cadence" doesn't necessarily predict song popularity across all genres.
+
+## References
+
+Aswad, Jem (March, 2023). "U.S. Recorded Music Revenue Scores All-Time High of \$15.9 Billion in 2022, Per RIAA Report", <https://variety.com/2023/music/news/riaa-2022-report-revenue-all-time-high-15-billion-1235547400/?sub_action=logged_in>
+
+Guarisco, M., Sallustio, M. & Rastelli, S (2023). "Spotify and Youtube", <https://www.kaggle.com/datasets/salvatorerastelli/spotify-and-youtube>

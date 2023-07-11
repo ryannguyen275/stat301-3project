@@ -1,0 +1,72 @@
+---
+title: "Predicting Popularity Of Songs"
+subtitle: "Data Science 3 with R (STAT 301-3) Final Project"
+author: "Zosia Alarr, Chelsea Lu, Ryan Nguyen"
+
+format:
+  html:
+    toc: true
+    embed-resources: true
+    echo: false
+    link-external-newwindow: true
+    
+execute:
+  warning: false
+  
+from: markdown+emoji  
+---
+**GitHub Repo:** <https://github.com/STAT301-3-2023SP/final-project-weheartr>
+
+## Executive Summary
+
+The music industry’s profitable growth has yet to slow, so the power of predicting a popular song can be important for song writers, producers and music artists. In order to tap into this industry, our objective was to predict the popularity of a song. Our dataset that we used to obtain this information was found on Kaggle, and took information from Spotify and Youtube. The link can be found [here](https://www.kaggle.com/datasets/salvatorerastelli/spotify-and-youtube).
+
+This dataset has 20,718 observations, each representing a different song, and includes all genres of music. It also consists of 26 variables, some descriptor (like artist name) and some numeric (like danceability of song, or number of likes). We mutated the `likes`variable into a new categorical response variable, `popularity`. The new response variable had four levels: 
+`least popular`: if the number of likes on a song was less than 23,160 
+`less popular`: If the number of likes was between 23,160 and 129,251.5 
+ `more popular`: if the number of likes was between 129.251.5 and 520,054.2 
+ `most popular`: if the number of likes was greater than 520,054.2 
+Because this is a multi-class classification problem, our metric to assess model results was ROC AUC, or the area under the ROC curve. One problem we encountered during the initial exploratory data analysis was the inability to impute the missing observations in our `likes` variable, so we just removed them.
+
+We tested three recipes, including a kitchen sink recipe with a random forest, elastic net, neural network, boosted tree, k-nearest neighbors, SVM radial, and SVM poly. Below includes our best performing models with our first kitchen sink recipe.
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(kableExtra)
+load("recipe_1/results/recipe_1_results.rda")
+best_graph_1
+best_results %>% 
+  rename("runtime (minutes)" = runtime) %>% 
+  kbl() %>% 
+  kable_styling()
+```
+
+
+After further tuning and testing our next 2 recipes, our best performing one was the kitchen sink recipe that included all 26 predictor variables, and a tokenized variable that took into account the artist name. After building and tuning 8 models (including a stacked model of our 3 best-performing models - random forest, SVM poly, and boosted tree), we determined that the best performing model was random forest using our kitchen sink recipe, as the results can be seen below.
+
+```{r}
+load("results/recipe_comp.rda")
+model_comp
+recipe_comp %>% 
+  kbl() %>% 
+  kable_styling()
+```
+
+The ROC AUC was 0.98, very close to the target 1.0. The accuracy was 0.887, indicating that the model predicts what popularity level a song will fall under 88% of the time. We found the best tuning parameters to be `mtry` set to 25 and `min_n` set to 2. Overall, we were successful in fitting our testing data to our best performing model. It performed better than the null model, and had a similar ROC AUC to the training data. 
+
+
+![ROC AUC Value ](rf_roc_auc.png)
+
+
+![Accuracy](rf_params.png)
+
+For future analysis and next steps, we recommend a number of things. Because of computational errors, we were unable to run the MARS model successfully and also couldn't impute the `likes` missing observations. Our next attempt would involve figuring out those issues. Furthermore, more work could be done on extremely viral songs that have millions of likes. This is especially prevalent in the time of Tik Tok, where snippets of songs get popular, leading the entire song to viralness on music streaming platforms. Next time, we could perhaps create a new category to deal with those extreme outliers, and find a dataset that has more observations to include them.
+
+It would also be interesting to explore a larger dataset with more observations pulled from other music streaming platforms to get a more comprehensive prediction of the music streaming industry. This might include Apple Music, Pandora, or TIDAL. Future analysis might also involve predicting song popularity within genres, like pop/hip-hop/folk. This is because variables like "danceability" or "cadence" doesn't necessarily predict song popularity across all genres.
+
+## References
+
+Guarisco, M., Sallustio, M. & Rastelli, S (2023). "Spotify and Youtube", <https://www.kaggle.com/datasets/salvatorerastelli/spotify-and-youtube>
+
+
